@@ -16,7 +16,9 @@
       "Bash(iconv -f UTF-16LE -t UTF-8 .env)",
       "Bash(mv .env.tmp .env)",
       "Bash(npx tsc:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(gh api:*)",
+      "Bash(gh run:*)"
     ]
   }
 }
