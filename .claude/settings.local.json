@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find . -maxdepth 2 -type f -name *.json -o -name *.ts -o -name *.tsx -o -name .gitignore)",
+      "Bash(ls -la /c/Users/fre_e/source/collaborativeminds/aikurs/my-weather-app/.* /c/Users/fre_e/source/collaborativeminds/aikurs/my-weather-app/*)",
+      "Bash(npm --version)",
+      "Bash(git -C /c/Users/fre_e/source/collaborativeminds/aikurs/my-weather-app log --oneline -5)",
+      "Bash(npm view:*)",
+      "Bash(npm create:*)",
+      "Bash(npm install:*)",
+      "Bash(npx shadcn@latest init --defaults)",
+      "Bash(npx shadcn@latest add input card)",
+      "Bash(rm -f src/App.css)",
+      "Bash(rm -rf src/assets)",
+      "Bash(rm -f public/vite.svg)",
+      "Bash(iconv -f UTF-16LE -t UTF-8 .env)",
+      "Bash(mv .env.tmp .env)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run:*)"
+    ]
+  }
+}
