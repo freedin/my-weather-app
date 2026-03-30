@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, useCallback, type FormEvent } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -8,8 +8,32 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { fetchWeather, type WeatherData } from "@/lib/weather";
+import {
+  fetchWeather,
+  fetchWeatherByLocation,
+  type WeatherData,
+} from "@/lib/weather";
 import { useTheme } from "@/lib/use-theme";
+
+const RECENT_KEY = "weather-recent-cities";
+const GEO_OFFERED_KEY = "weather-geo-offered";
+const MAX_RECENT = 5;
+
+function getRecentCities(): string[] {
+  try {
+    return JSON.parse(localStorage.getItem(RECENT_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function addRecentCity(city: string) {
+  const recent = getRecentCities().filter(
+    (c) => c.toLowerCase() !== city.toLowerCase()
+  );
+  recent.unshift(city);
+  localStorage.setItem(RECENT_KEY, JSON.stringify(recent.slice(0, MAX_RECENT)));
+}
 
 function App() {
   const { theme, toggleTheme } = useTheme();
@@ -18,26 +42,91 @@ function App() {
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [recentCities, setRecentCities] = useState(getRecentCities);
+  const [geoStatus, setGeoStatus] = useState<
+    "idle" | "prompt" | "loading" | "denied" | "unavailable"
+  >("idle");
 
-  const handleSearch = async (e: FormEvent) => {
-    e.preventDefault();
-    const trimmed = city.trim();
-    if (!trimmed) return;
-
-    setSearchedCity(trimmed);
+  const searchCity = useCallback(async (name: string) => {
+    setSearchedCity(name);
+    setCity(name);
     setLoading(true);
     setError("");
     setWeather(null);
 
     try {
-      const data = await fetchWeather(trimmed);
+      const data = await fetchWeather(name);
       setWeather(data);
+      addRecentCity(data.cityName);
+      setRecentCities(getRecentCities());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  const handleSearch = (e: FormEvent) => {
+    e.preventDefault();
+    const trimmed = city.trim();
+    if (!trimmed) return;
+    searchCity(trimmed);
   };
+
+  const handleGeolocate = useCallback(async () => {
+    setGeoStatus("loading");
+    localStorage.setItem(GEO_OFFERED_KEY, "true");
+
+    try {
+      const position = await new Promise<GeolocationPosition>(
+        (resolve, reject) =>
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            timeout: 10000,
+          })
+      );
+
+      const { latitude, longitude } = position.coords;
+      setLoading(true);
+      setError("");
+      setWeather(null);
+
+      const data = await fetchWeatherByLocation(latitude, longitude);
+      setSearchedCity(data.cityName);
+      setCity(data.cityName);
+      setWeather(data);
+      addRecentCity(data.cityName);
+      setRecentCities(getRecentCities());
+      setGeoStatus("idle");
+    } catch (err) {
+      if (
+        err instanceof GeolocationPositionError &&
+        err.code === err.PERMISSION_DENIED
+      ) {
+        setGeoStatus("denied");
+      } else {
+        setGeoStatus("unavailable");
+        setError(
+          err instanceof Error ? err.message : "Could not get your location"
+        );
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const dismissGeo = () => {
+    localStorage.setItem(GEO_OFFERED_KEY, "true");
+    setGeoStatus("idle");
+  };
+
+  useEffect(() => {
+    if (
+      !localStorage.getItem(GEO_OFFERED_KEY) &&
+      "geolocation" in navigator
+    ) {
+      setGeoStatus("prompt");
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-blue-50 dark:bg-background transition-colors duration-300">
@@ -127,7 +216,68 @@ function App() {
           Type a city name and press Search to see weather information.
         </p>
 
-        {!searchedCity && (
+        {recentCities.length > 0 && (
+          <div className="mb-6 flex flex-wrap items-center gap-2">
+            <span className="text-sm text-muted-foreground">Recent:</span>
+            {recentCities.map((name) => (
+              <Button
+                key={name}
+                variant="secondary"
+                size="sm"
+                className="rounded-full"
+                onClick={() => searchCity(name)}
+                disabled={loading}
+              >
+                {name}
+              </Button>
+            ))}
+          </div>
+        )}
+
+        {geoStatus === "prompt" && (
+          <Card className="rounded-2xl border-blue-200 dark:border-border shadow-md mb-6">
+            <CardContent className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <p className="text-blue-700 dark:text-blue-300">
+                Would you like to see weather for your current location?
+              </p>
+              <div className="flex gap-2 shrink-0">
+                <Button
+                  onClick={handleGeolocate}
+                  className="rounded-full bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+                >
+                  Use my location
+                </Button>
+                <Button
+                  variant="outline"
+                  className="rounded-full"
+                  onClick={dismissGeo}
+                >
+                  No thanks
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {geoStatus === "loading" && !loading && (
+          <div role="status" aria-live="polite" className="text-center py-4 mb-6">
+            <p className="text-blue-500 dark:text-blue-400 text-lg animate-pulse">
+              Detecting your location...
+            </p>
+          </div>
+        )}
+
+        {geoStatus === "denied" && (
+          <Card className="rounded-2xl border-yellow-200 dark:border-yellow-800 shadow-md mb-6">
+            <CardContent className="pt-6">
+              <p className="text-yellow-700 dark:text-yellow-400 text-center">
+                Location access was denied. You can search for a city manually.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {!searchedCity && !loading && geoStatus !== "prompt" && geoStatus !== "loading" && (
           <div className="text-center text-blue-400 dark:text-blue-300/60 py-16">
             <p className="text-lg">
               Search for a city to see weather information.

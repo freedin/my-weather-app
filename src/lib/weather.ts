@@ -87,17 +87,12 @@ function groupForecastByDay(list: ForecastItem[]): DayForecast[] {
   return result.sort((a, b) => a.date.localeCompare(b.date)).slice(0, 5);
 }
 
-export async function fetchWeather(city: string): Promise<WeatherData> {
-  const geoRes = await fetch(
-    `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(city)}&limit=1&appid=${API_KEY}`
-  );
-  if (!geoRes.ok) throw new Error("Weather data unavailable");
-
-  const geoData: GeoResult[] = await geoRes.json();
-  if (geoData.length === 0) throw new Error("City not found");
-
-  const { lat, lon, name, country } = geoData[0];
-
+async function fetchWeatherByCoords(
+  lat: number,
+  lon: number,
+  cityName: string,
+  country: string
+): Promise<WeatherData> {
   const [currentRes, forecastRes] = await Promise.all([
     fetch(
       `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${API_KEY}`
@@ -115,7 +110,7 @@ export async function fetchWeather(city: string): Promise<WeatherData> {
   const forecastData: ForecastResponse = await forecastRes.json();
 
   return {
-    cityName: name,
+    cityName,
     country,
     temp: Math.round(current.main.temp),
     description: current.weather[0].description,
@@ -124,4 +119,33 @@ export async function fetchWeather(city: string): Promise<WeatherData> {
     windSpeed: current.wind.speed,
     forecast: groupForecastByDay(forecastData.list),
   };
+}
+
+export async function fetchWeather(city: string): Promise<WeatherData> {
+  const geoRes = await fetch(
+    `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(city)}&limit=1&appid=${API_KEY}`
+  );
+  if (!geoRes.ok) throw new Error("Weather data unavailable");
+
+  const geoData: GeoResult[] = await geoRes.json();
+  if (geoData.length === 0) throw new Error("City not found");
+
+  const { lat, lon, name, country } = geoData[0];
+  return fetchWeatherByCoords(lat, lon, name, country);
+}
+
+export async function fetchWeatherByLocation(
+  lat: number,
+  lon: number
+): Promise<WeatherData> {
+  const geoRes = await fetch(
+    `https://api.openweathermap.org/geo/1.0/reverse?lat=${lat}&lon=${lon}&limit=1&appid=${API_KEY}`
+  );
+  if (!geoRes.ok) throw new Error("Weather data unavailable");
+
+  const geoData: GeoResult[] = await geoRes.json();
+  if (geoData.length === 0) throw new Error("Could not determine your location");
+
+  const { name, country } = geoData[0];
+  return fetchWeatherByCoords(lat, lon, name, country);
 }
